@@ -18,6 +18,9 @@
 *.a
 *.so
 
+# Binary
+topograph
+
 # Folders
 _obj
 _test

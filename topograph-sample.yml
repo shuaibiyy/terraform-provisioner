@@ -1,8 +1,18 @@
 git_repo: https://github.com/shuaibiyy/ecs-jenkins
 
-provision:
-  parameters:
-    desired_service_count: 3
-    desired_instance_capacity: 2
-    max_instance_size: 2
-  action: apply
+provisions:
+
+  jenkins_1:
+    action: apply
+    parameters:
+      desired_service_count: 3
+      desired_instance_capacity: 2
+      max_instance_size: 2
+
+  jenkins_2:
+    action: apply
+    state: changed
+    parameters:
+      desired_service_count: 1
+      desired_instance_capacity: 1
+      max_instance_size: 1
