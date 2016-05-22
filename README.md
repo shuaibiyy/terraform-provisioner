@@ -6,7 +6,14 @@ A project for managing multiple provisions of the same [Terraform](https://terra
 
 ## Usage
 
-    $> topographer topograph.yml
+1. Create a yaml config (refer to `topograph-sample.yml`), e.g. `topograph.yml`.
+2. Export Git credentials if using a private repository:
+
+        $> export TP_GIT_USER=<git_username>
+        $> export TP_GIT_PASSWORD=<git_password>
+3. Run:
+
+        $> topographer topograph.yml
 
 ## What does it do?
 
