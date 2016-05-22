@@ -7,6 +7,7 @@ import (
     "log"
     "gopkg.in/yaml.v2"
     "github.com/libgit2/git2go"
+    "github.com/codeskyblue/go-sh"
 )
 
 type Provision struct {
@@ -16,9 +17,11 @@ type Provision struct {
 }
 
 type Config struct {
-    GitRepo string `yaml:"git_repo"`
+    TfRepo string `yaml:"tf_repo"`
     Provisions map[string]Provision
 }
+
+const TfDir = "./project"
 
 func check(e error) {
     if e != nil {
@@ -26,10 +29,9 @@ func check(e error) {
     }
 }
 
-func cloneGitRepo(repoUrl string) {
+func cloneTfRepo(repoUrl string) {
     username := os.Getenv("TP_GIT_USER")
     password := os.Getenv("TP_GIT_PASSWORD")
-    folder := "./project"
 
     callbacks := git.RemoteCallbacks{
         CredentialsCallback: makeCredentialsCallback(username, password),
@@ -41,9 +43,12 @@ func cloneGitRepo(repoUrl string) {
         },
     }
 
-    fmt.Printf("git clone: %v\n", repoUrl)
+    if sh.Test("dir", TfDir) {
+        sh.Command("rm", "-r", TfDir).Run()
+    }
 
-    if _, err := git.Clone(repoUrl, folder, cloneOpts); err != nil {
+    fmt.Printf("git clone: %v\n", repoUrl)
+    if _, err := git.Clone(repoUrl, TfDir, cloneOpts); err != nil {
         fmt.Println("clone error:", err)
     }
 }
@@ -77,20 +82,33 @@ func getConfig(config string) Config {
     return c
 }
 
+func tfApply() {
+    sh.Command("terraform", "apply", sh.Dir(TfDir)).Run()
+}
+
+func tfDestroy() {
+    sh.Command("terraform", "destroy", "-force", sh.Dir(TfDir)).Run()
+}
+
+func tfPlan() {
+    sh.Command("terraform", "plan", sh.Dir(TfDir)).Run()
+}
+
 func main() {
     args := os.Args[1:]
 
     if len(args) < 1 {
-        fmt.Println("usage: topographer <config_file>")
+        fmt.Println("usage: topo <config_file>")
         os.Exit(2)
     }
 
     configFile := args[0]
-    fmt.Printf("topographer configuration file: %v\n\n", configFile)
+    fmt.Printf("topo configuration file: %v\n\n", configFile)
 
     config := getConfig(getConfigYaml(configFile))
     fmt.Printf("--- config:\n%v\n\n", config)
 
-    cloneGitRepo(config.GitRepo)
-}
+    cloneTfRepo(config.TfRepo)
 
+    tfPlan()
+}

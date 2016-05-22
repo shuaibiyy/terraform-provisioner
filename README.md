@@ -1,19 +1,35 @@
-# Topographer
+# Topo
 
 [WORK IN PROGRESS]
 
-A project for managing multiple provisions of the same [Terraform](https://terraform.io) scripts.
+A project for managing multiple provisions of the same [Terraform](https://terraform.io) scripts. Topo clones a Terraform project specified in a configuration file, and runs parameterized Terraform commands on it.
+
+Format of Topo configuration file:
+
+    tf_repo: <git_repo_url>
+    
+    provisions:
+        <name>
+            action: apply | destroy
+            state: applied | changed | destroyed | nil
+            parameters:
+                <key>: <value>
 
 ## Usage
 
-1. Create a yaml config (refer to `topograph-sample.yml`), e.g. `topograph.yml`.
-2. Export Git credentials if using a private repository:
+1. Create a yaml file using the Topo config format (you can refer to `topograph-sample.yml`), and name it something like `topograph.yml`.
+2. Export the following environment variables:
 
-        $> export TP_GIT_USER=<git_username>
-        $> export TP_GIT_PASSWORD=<git_password>
-3. Run:
+        $ export AWS_ACCESS_KEY_ID="accesskey" # For tf to access AWS.
+        $ export AWS_SECRET_ACCESS_KEY="secretkey"
+        $ export AWS_DEFAULT_REGION="us-west-2"
+        $ export TF_VAR_access_key=$AWS_ACCESS_KEY # Not necessary if the variable is not defined in your tf project.
+        $ export TF_VAR_secret_key=$AWS_SECRET_ACCESS_KEY # Not necessary if the variable is not defined in your tf project.
+        $ export TP_GIT_USER=<git_username> # Git credentials if tf project is in a private repository.
+        $ export TP_GIT_PASSWORD=<git_password>
+3. Run Topo with config created in step 1:
 
-        $> topographer topograph.yml
+        $ topo topograph.yml
 
 ## What does it do?
 
@@ -32,9 +48,9 @@ A project for managing multiple provisions of the same [Terraform](https://terra
     - `changed` state with a `destroy` action.
     - `destroyed` state with a `destroy` action.
     - `applied` state with an `apply` action.
-3. Topographer runs a parameterized terraform (tf) command on all provisions in the config based on their action and optional state.
-4. A topographer run involves the following:
-    1. Checking out a git repo.
+3. Topo runs a parameterized terraform (tf) command on all provisions in the config based on their action and optional state.
+4. A topo run involves the following:
+    1. Cloning a git repo that contains Terraform scripts.
     2. Configuring the tf remote state.
     3. Running a tf command if none of the ignore criteria is met.
 5. For each successful tf command, the provision's state in the config file is updated to either `applied` or `destroyed`.
