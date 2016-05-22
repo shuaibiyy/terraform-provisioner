@@ -20,7 +20,7 @@ project
 *.so
 
 # Binary
-topograph
+topo
 
 # Folders
 _obj
