@@ -7,6 +7,7 @@ A project for managing multiple provisions of the same [Terraform](https://terra
 Format of Topo configuration file:
 
     tf_repo: <git_repo_url>
+    s3_bucket: <s3_bucket> # s3 bucket where Terraform remote state resides.
     
     provisions:
         <name>
@@ -22,7 +23,7 @@ Format of Topo configuration file:
 
         $ export AWS_ACCESS_KEY_ID="accesskey" # For tf to access AWS.
         $ export AWS_SECRET_ACCESS_KEY="secretkey"
-        $ export AWS_DEFAULT_REGION="us-west-2"
+        $ export AWS_DEFAULT_REGION="us-east-1"
         $ export TF_VAR_access_key=$AWS_ACCESS_KEY # Not necessary if the variable is not defined in your tf project.
         $ export TF_VAR_secret_key=$AWS_SECRET_ACCESS_KEY # Not necessary if the variable is not defined in your tf project.
         $ export TP_GIT_USER=<git_username> # Git credentials if tf project is in a private repository.

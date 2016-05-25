@@ -1,4 +1,4 @@
-project
+projects
 *.iml
 
 ## Directory-based project format:
@@ -24,7 +24,7 @@ topo
 
 # Folders
 _obj
-_test
+_testassert.Equal
 
 # Architecture specific extensions/prefixes
 *.[568vq]
