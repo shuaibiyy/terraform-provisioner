@@ -39,7 +39,7 @@ provisions:
 	assert.Equal(t, expected, actual)
 }
 
-func TestGetQualifiedConfig(t *testing.T) {
+func TestComputeQualifiedConfig(t *testing.T) {
 	const configYaml = `
 tf_repo: https://github.com/shuaibiyy/ecs-jenkins.git
 s3_bucket: bucket-topo
@@ -58,10 +58,33 @@ provisions:
     action: apply
     state: changed
     parameters:
+      desired_service_count: 5
+      desired_instance_capacity: 3
+      max_instance_size: 4
+
+  jenkins_3:
+    action: destroy
+    state: changed
+    parameters:
       desired_service_count: 1
       desired_instance_capacity: 1
       max_instance_size: 2
 
+  jenkins_4:
+    action: destroy
+    state: applied
+    parameters:
+      desired_service_count: 2
+      desired_instance_capacity: 2
+      max_instance_size: 2
+
+  jenkins_5:
+    action: apply
+    state: applied
+    parameters:
+      desired_service_count: 4
+      desired_instance_capacity: 2
+      max_instance_size: 3
 `
 
 	expected := Config{
@@ -72,8 +95,17 @@ provisions:
 				Action: "apply",
 				State: "changed",
 				Parameters: map[string]string{
-					"desired_service_count":     "1",
-					"desired_instance_capacity": "1",
+					"desired_service_count":     "5",
+					"desired_instance_capacity": "3",
+					"max_instance_size":         "4",
+				},
+			},
+			"jenkins_4": Provision{
+				Action: "destroy",
+				State: "applied",
+				Parameters: map[string]string{
+					"desired_service_count":     "2",
+					"desired_instance_capacity": "2",
 					"max_instance_size":         "2",
 				},
 			},
