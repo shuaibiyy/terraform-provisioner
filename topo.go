@@ -118,8 +118,8 @@ func configureRemoteStates(c *Config) {
 		go func() {
 			fmt.Printf("initialize remote state file for: %v\n", s)
 			sh.Command("terraform", "remote", "config", "-backend=s3",
-				"-backend-config='bucket=" + c.S3Bucket + "'",
-				"-backend-config='key=" + s + "/terraform.tfstate'",
+				"-backend-config", "bucket="+ c.S3Bucket,
+				"-backend-config", "key=" + s + "/terraform.tfstate",
 				sh.Dir(Projects+"/"+s)).Run()
 			ch <- s
 		}()
