@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/codeskyblue/go-sh"
 	"github.com/libgit2/git2go"
 	"gopkg.in/yaml.v2"
@@ -25,7 +24,6 @@ type Config struct {
 }
 
 const Projects = "./projects"
-
 // Directory where the Terraform project is saved to.
 const Original = Projects + "/original"
 
@@ -54,9 +52,9 @@ func cloneTfProj(repoUrl string) {
 		sh.Command("rm", "-r", Original).Run()
 	}
 
-	fmt.Printf("git clone: %v\n", repoUrl)
+	log.Printf("git clone: %v\n", repoUrl)
 	if _, err := git.Clone(repoUrl, Original, cloneOpts); err != nil {
-		fmt.Println("clone error:", err)
+		log.Println("clone error: ", err)
 	}
 }
 
@@ -94,19 +92,17 @@ func getConfig(config string) Config {
 
 // Make copies of the Terraform project for each provision.
 func mkProjCopies(c *Config) {
-	fmt.Println()
-
 	ch := make(chan string, len(c.Provisions))
 	for k := range c.Provisions {
 		s := k
 		go func() {
-			fmt.Printf("creating copy of project for: %v\n", s)
+			log.Printf("creating copy of project for: %v\n", s)
 			sh.Command("cp", "-rf", Original, Projects+"/"+s).Run()
 			ch <- s
 		}()
 	}
 	for i := 0; i < len(c.Provisions); i++ {
-		fmt.Printf("done copying: %v\n", <-ch)
+		log.Printf("done copying: %v\n", <-ch)
 	}
 }
 
@@ -116,7 +112,7 @@ func configureRemoteStates(c *Config) {
 	for k := range c.Provisions {
 		s := k
 		go func() {
-			fmt.Printf("initialize remote state file for: %v\n", s)
+			log.Printf("initialize remote state file for: %v\n", s)
 			sh.Command("terraform", "remote", "config", "-backend=s3",
 				"-backend-config", "bucket="+ c.S3Bucket,
 				"-backend-config", "key=" + s + "/terraform.tfstate",
@@ -125,25 +121,42 @@ func configureRemoteStates(c *Config) {
 		}()
 	}
 	for i := 0; i < len(c.Provisions); i++ {
-		fmt.Printf("done configuring remote state: %v\n", <-ch)
+		log.Printf("done configuring remote state: %v\n", <-ch)
 	}
+}
+
+func computeQualifiedConfig(c *Config) *Config {
+	for k,v := range c.Provisions {
+		if v.State == "changed" && v.Action == "destroy" {
+			delete(c.Provisions, k)
+		}
+		if v.State == "destroyed" && v.Action == "destroy" {
+			delete(c.Provisions, k)
+		}
+		if v.State == "applied" && v.Action == "apply" {
+			delete(c.Provisions, k)
+		}
+	}
+
+	return c
 }
 
 func main() {
 	args := os.Args[1:]
 
 	if len(args) < 1 {
-		fmt.Println("usage: topo <config_file>")
+		log.Println("usage: topo <config_file>")
 		os.Exit(2)
 	}
 
 	configFile := args[0]
-	fmt.Printf("topo configuration file: %v\n\n", configFile)
+	log.Printf("topo configuration file: %v\n\n", configFile)
 
 	config := getConfig(getConfigYaml(configFile))
-	fmt.Printf("--- config:\n%v\n\n", config)
+	log.Printf("--- config:\n%v\n\n", config)
 
 	cloneTfProj(config.TfRepo)
 	mkProjCopies(&config)
 	configureRemoteStates(&config)
+	computeQualifiedConfig(&config)
 }
