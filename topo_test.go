@@ -21,7 +21,7 @@ provisions:
 `
 
 	expected := Config{
-		TfRepo: "https://github.com/shuaibiyy/ecs-jenkins.git",
+		TfRepo:   "https://github.com/shuaibiyy/ecs-jenkins.git",
 		S3Bucket: "bucket-topo",
 		Provisions: map[string]Provision{
 			"jenkins_1": Provision{
@@ -35,7 +35,6 @@ provisions:
 		},
 	}
 	actual := getConfig(configYaml)
-
 	assert.Equal(t, expected, actual)
 }
 
@@ -88,12 +87,12 @@ provisions:
 `
 
 	expected := Config{
-		TfRepo: "https://github.com/shuaibiyy/ecs-jenkins.git",
+		TfRepo:   "https://github.com/shuaibiyy/ecs-jenkins.git",
 		S3Bucket: "bucket-topo",
 		Provisions: map[string]Provision{
 			"jenkins_2": Provision{
 				Action: "apply",
-				State: "changed",
+				State:  "changed",
 				Parameters: map[string]string{
 					"desired_service_count":     "5",
 					"desired_instance_capacity": "3",
@@ -102,7 +101,7 @@ provisions:
 			},
 			"jenkins_4": Provision{
 				Action: "destroy",
-				State: "applied",
+				State:  "applied",
 				Parameters: map[string]string{
 					"desired_service_count":     "2",
 					"desired_instance_capacity": "2",
@@ -114,6 +113,53 @@ provisions:
 
 	config := getConfig(configYaml)
 	actual := computeQualifiedConfig(&config)
-
 	assert.Equal(t, expected, *actual)
+}
+
+func TestPrepareDestroyArgs(t *testing.T) {
+	var expected []interface{}
+	expected = append(expected, "destroy", "-force", "-var", "desired_service_count=2",
+		"-var", "desired_instance_capacity=1", "-var", "max_instance_size=1")
+	c := Config{
+		TfRepo:   "https://github.com/shuaibiyy/ecs-jenkins.git",
+		S3Bucket: "bucket-topo",
+		Provisions: map[string]Provision{
+			"jenkins_2": Provision{
+				Action: "destroy",
+				State:  "applied",
+				Parameters: map[string]string{
+					"desired_service_count":     "2",
+					"desired_instance_capacity": "1",
+					"max_instance_size":         "1",
+				},
+			},
+		},
+	}
+	p := c.Provisions["jenkins_2"]
+	actual := prepareDestroyArgs(&p)
+	assert.Equal(t, expected, actual)
+}
+
+func TestPrepareApplyArgs(t *testing.T) {
+	var expected []interface{}
+	expected = append(expected, "apply", "-var", "desired_service_count=2",
+		"-var", "desired_instance_capacity=1", "-var", "max_instance_size=1")
+	c := Config{
+		TfRepo:   "https://github.com/shuaibiyy/ecs-jenkins.git",
+		S3Bucket: "bucket-topo",
+		Provisions: map[string]Provision{
+			"jenkins_2": Provision{
+				Action: "apply",
+				State:  "changed",
+				Parameters: map[string]string{
+					"desired_service_count":     "2",
+					"desired_instance_capacity": "1",
+					"max_instance_size":         "1",
+				},
+			},
+		},
+	}
+	p := c.Provisions["jenkins_2"]
+	actual := prepareApplyArgs(&p)
+	assert.Equal(t, expected, actual)
 }

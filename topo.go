@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"github.com/codeskyblue/go-sh"
 	"github.com/libgit2/git2go"
 	"gopkg.in/yaml.v2"
@@ -34,7 +35,7 @@ func check(e error) {
 }
 
 // Git clone the Terraform project.
-func cloneTfProj(repoUrl string) {
+func cloneTfProj(repoUrl string, update bool) bool {
 	username := os.Getenv("TP_GIT_USER")
 	password := os.Getenv("TP_GIT_PASSWORD")
 
@@ -48,19 +49,25 @@ func cloneTfProj(repoUrl string) {
 		},
 	}
 
+	// If repo exists and update flag is set to true, remove project directory and clone.
 	if sh.Test("dir", Original) {
-		sh.Command("rm", "-r", Original).Run()
+		if update {
+			sh.Command("rm", "-r", Projects).Run()
+		} else {
+			return false
+		}
 	}
 
 	log.Printf("git clone: %v\n", repoUrl)
 	if _, err := git.Clone(repoUrl, Original, cloneOpts); err != nil {
 		log.Println("clone error: ", err)
 	}
+	return true
 }
 
 // Gets called when authentication credentials are requested during git clone.
 func makeCredentialsCallback(username, password string) git.CredentialsCallback {
-	// If we're trying it means the credentials are invalid
+	// If we're trying, it means the credentials are invalid.
 	called := false
 	return func(url string, username_from_url string, allowed_types git.CredType) (git.ErrorCode, *git.Cred) {
 		if called {
@@ -82,7 +89,6 @@ func getConfigYaml(configFile string) string {
 // Takes the yaml config string and unmarshals it to a Config struct.
 func getConfig(config string) Config {
 	c := Config{}
-
 	err := yaml.Unmarshal([]byte(config), &c)
 	if err != nil {
 		log.Fatalf("error: %v", err)
@@ -110,14 +116,14 @@ func mkProjCopies(c *Config) {
 func configureRemoteStates(c *Config) {
 	ch := make(chan string, len(c.Provisions))
 	for k := range c.Provisions {
-		s := k
+		name := k
 		go func() {
-			log.Printf("initialize remote state file for: %v\n", s)
+			log.Printf("initialize remote state file for: %v\n", name)
 			sh.Command("terraform", "remote", "config", "-backend=s3",
-				"-backend-config", "bucket="+ c.S3Bucket,
-				"-backend-config", "key=" + s + "/terraform.tfstate",
-				sh.Dir(Projects+"/"+s)).Run()
-			ch <- s
+				"-backend-config", "bucket="+c.S3Bucket,
+				"-backend-config", "key="+name+"/terraform.tfstate",
+				sh.Dir(Projects+"/"+name)).Run()
+			ch <- name
 		}()
 	}
 	for i := 0; i < len(c.Provisions); i++ {
@@ -126,7 +132,7 @@ func configureRemoteStates(c *Config) {
 }
 
 func computeQualifiedConfig(c *Config) *Config {
-	for k,v := range c.Provisions {
+	for k, v := range c.Provisions {
 		if v.State == "changed" && v.Action == "destroy" {
 			delete(c.Provisions, k)
 		}
@@ -137,26 +143,85 @@ func computeQualifiedConfig(c *Config) *Config {
 			delete(c.Provisions, k)
 		}
 	}
-
 	return c
 }
 
-func main() {
-	args := os.Args[1:]
+// Run terraform commands for all provisions.
+func provision(c *Config) {
+	ch := make(chan string, len(c.Provisions))
+	for k, v := range c.Provisions {
+		name := k
+		switch v.Action {
+		case "apply":
+			args := prepareApplyArgs(&v)
+			go runTfCmd(name, args, ch)
+		case "destroy":
+			args := prepareDestroyArgs(&v)
+			go runTfCmd(name, args, ch)
+		default:
+			log.Printf("unknown action '%v' for provision '%v'. skipping...\n", v.Action, name)
+		}
+	}
+	log.Printf("completed terraform command for: %v\n", <-ch)
+}
 
-	if len(args) < 1 {
-		log.Println("usage: topo <config_file>")
+func runTfCmd(name string, cmdArgs []interface{}, c chan string) {
+	s := sh.NewSession()
+	s.ShowCMD = true
+	s.SetDir(Projects + "/" + name)
+	s.Command("terraform", cmdArgs...).Run()
+	c <- name
+}
+
+func prepareDestroyArgs(p *Provision) []interface{} {
+	return prepareArgs([]string{"destroy", "-force"}, p)
+}
+
+func prepareApplyArgs(p *Provision) []interface{} {
+	return prepareArgs([]string{"apply"}, p)
+}
+
+func prepareArgs(action []string, p *Provision) []interface{} {
+	args := []string{}
+	args = append(args, action...)
+	for k1, v1 := range p.Parameters {
+		args = append(args, "-var", k1+"="+v1)
+	}
+	cmdArgs := make([]interface{}, len(args))
+	for i, v := range args {
+		cmdArgs[i] = v
+	}
+	return cmdArgs
+}
+
+func topo(c *Config, flags map[string]interface{}) {
+	if val, ok := flags["update"].(bool); ok {
+		if cloneTfProj(c.TfRepo, val) {
+			mkProjCopies(c)
+		}
+	}
+	computeQualifiedConfig(c)
+	configureRemoteStates(c)
+	provision(c)
+}
+
+func main() {
+	flags := make(map[string]interface{})
+	update := flag.Bool("update", false, "guarantees that the terraform project will be fetched from remote")
+
+	flag.Parse()
+	flags["update"] = *update
+
+	if len(flag.Args()) < 1 {
+		log.Println("usage: topo [flags...] <config_file>")
 		os.Exit(2)
 	}
 
-	configFile := args[0]
-	log.Printf("topo configuration file: %v\n\n", configFile)
+	configFile := flag.Args()[0]
+	log.Printf("topo configuration file: %v\n", configFile)
 
 	config := getConfig(getConfigYaml(configFile))
-	log.Printf("--- config:\n%v\n\n", config)
+	log.Printf("--- config:\n%v\n", config)
 
-	cloneTfProj(config.TfRepo)
-	mkProjCopies(&config)
-	configureRemoteStates(&config)
-	computeQualifiedConfig(&config)
+	topo(&config, flags)
 }

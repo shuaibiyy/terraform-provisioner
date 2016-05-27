@@ -1,10 +1,10 @@
 # Topo
 
-[WORK IN PROGRESS]
+Topo manages multiple provisions of the same [Terraform](https://terraform.io) scripts.
+Topo clones a Terraform project specified in a configuration file, and runs parameterized Terraform commands on it.
+Topo uses [Goroutines](https://www.golang-book.com/books/intro/10) to run Terraform commands and perform certain tasks concurrently. This helps Topo achieve acceptable speed.
 
-A project for managing multiple provisions of the same [Terraform](https://terraform.io) scripts. Topo clones a Terraform project specified in a configuration file, and runs parameterized Terraform commands on it.
-
-Format of Topo configuration file:
+Topo configuration file format:
 
     tf_repo: <git_repo_url>
     s3_bucket: <s3_bucket> # s3 bucket where Terraform remote state resides.
@@ -30,11 +30,15 @@ Format of Topo configuration file:
         $ export TP_GIT_PASSWORD=<git_password>
 3. Run Topo with config created in step 1:
 
-        $ topo topograph.yml
+        $ topo [flags...] topograph.yml
+    Available flags are:
+    * `-update`: when specified guarantees that the terraform project will be fetched from remote, even if it was previously fetched. Note that flags must appear before the name of the config file, e.g.:
+        
+            $ topo -update <config_file>
 
-## What does it do?
+## What exactly does Topo do?
 
-1. Accepts and parses a YAML configuration file. A configuration file should contain one or more provision blocks, which looks like:
+1. Accepts and parses a YAML configuration file. A configuration file should contain one or more provision blocks, which look like:
 
         provisions:
           jenkins_2:
@@ -51,7 +55,7 @@ Format of Topo configuration file:
     - `applied` state with an `apply` action.
 3. Topo runs a parameterized terraform (tf) command on all provisions in the config based on their action and optional state.
 4. A topo run involves the following:
-    1. Cloning a git repo that contains Terraform scripts.
+    1. Cloning a git repo that contains tf scripts.
     2. Configuring the tf remote state.
     3. Running a tf command if none of the ignore criteria is met.
 5. For each successful tf command, the provision's state in the config file is updated to either `applied` or `destroyed`.
