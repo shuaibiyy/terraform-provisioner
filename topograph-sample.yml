@@ -1,19 +1,16 @@
 tf_repo: https://github.com/shuaibiyy/ecs-jenkins.git
 s3_bucket: flexisaf-topo
-
 provisions:
-
   jenkins_1:
     action: apply
     parameters:
-      desired_service_count: 3
-      desired_instance_capacity: 2
-      max_instance_size: 2
-
+      desired_instance_capacity: "2"
+      desired_service_count: "3"
+      max_instance_size: "2"
   jenkins_2:
     action: apply
     state: changed
     parameters:
-      desired_service_count: 1
-      desired_instance_capacity: 1
-      max_instance_size: 1
+      desired_instance_capacity: "1"
+      desired_service_count: "1"
+      max_instance_size: "1"

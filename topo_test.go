@@ -86,34 +86,60 @@ provisions:
       max_instance_size: 3
 `
 
-	expected := Config{
-		TfRepo:   "https://github.com/shuaibiyy/ecs-jenkins.git",
-		S3Bucket: "bucket-topo",
-		Provisions: map[string]Provision{
-			"jenkins_2": Provision{
-				Action: "apply",
-				State:  "changed",
-				Parameters: map[string]string{
-					"desired_service_count":     "5",
-					"desired_instance_capacity": "3",
-					"max_instance_size":         "4",
-				},
+	expectedQualified := map[string]Provision{
+		"jenkins_2": Provision{
+			Action: "apply",
+			State:  "changed",
+			Parameters: map[string]string{
+				"desired_service_count":     "5",
+				"desired_instance_capacity": "3",
+				"max_instance_size":         "4",
 			},
-			"jenkins_4": Provision{
-				Action: "destroy",
-				State:  "applied",
-				Parameters: map[string]string{
-					"desired_service_count":     "2",
-					"desired_instance_capacity": "2",
-					"max_instance_size":         "2",
-				},
+		},
+		"jenkins_4": Provision{
+			Action: "destroy",
+			State:  "applied",
+			Parameters: map[string]string{
+				"desired_service_count":     "2",
+				"desired_instance_capacity": "2",
+				"max_instance_size":         "2",
 			},
 		},
 	}
 
+	expectedUnQualified := map[string]Provision{
+		"jenkins_1": Provision{
+			Action: "destroy",
+			State:  "destroyed",
+			Parameters: map[string]string{
+				"desired_service_count":     "3",
+				"desired_instance_capacity": "2",
+				"max_instance_size":         "2",
+			},
+		},
+		"jenkins_3": Provision{
+			Action: "destroy",
+			State:  "changed",
+			Parameters: map[string]string{
+				"desired_service_count":     "1",
+				"desired_instance_capacity": "1",
+				"max_instance_size":         "2",
+			},
+		},
+		"jenkins_5": Provision{
+			Action: "apply",
+			State:  "applied",
+			Parameters: map[string]string{
+				"desired_service_count":     "4",
+				"desired_instance_capacity": "2",
+				"max_instance_size":         "3",
+			},
+		},
+	}
 	config := getConfig(configYaml)
-	actual := computeQualifiedConfig(&config)
-	assert.Equal(t, expected, *actual)
+	qualified, unqualified := computeQualifiedProvisions(&config)
+	assert.Equal(t, expectedQualified, qualified)
+	assert.Equal(t, expectedUnQualified, unqualified)
 }
 
 func TestPrepareDestroyArgs(t *testing.T) {

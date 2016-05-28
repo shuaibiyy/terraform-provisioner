@@ -10,10 +10,27 @@ import (
 	"os"
 )
 
-// Represents a Topo config provision.
+// Allowed provision states.
+type State string
+
+const (
+	Applied   State = "applied"
+	Destroyed       = "destroyed"
+	Changed         = "changed"
+)
+
+// Allowed provision actions.
+type Action string
+
+const (
+	Apply   Action = "apply"
+	Destroy        = "destroy"
+)
+
+// Represents a provision.
 type Provision struct {
-	Action     string
-	State      string
+	Action     Action
+	State      State
 	Parameters map[string]string
 }
 
@@ -24,25 +41,33 @@ type Config struct {
 	Provisions map[string]Provision
 }
 
+// Information about a Terraform command.
+type CmdInfo struct {
+	name   string
+	action Action
+}
+
+// Information about a copy command.
+type CopyInfo struct {
+	dest   string
+	copied bool
+}
+
+// Topo configuration file.
+var ConfigFile string
+
 const Projects = "./projects"
+
 // Directory where the Terraform project is saved to.
 const Original = Projects + "/original"
-
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
 
 // Git clone the Terraform project.
 func cloneTfProj(repoUrl string, update bool) bool {
 	username := os.Getenv("TP_GIT_USER")
 	password := os.Getenv("TP_GIT_PASSWORD")
-
 	callbacks := git.RemoteCallbacks{
-		CredentialsCallback: makeCredentialsCallback(username, password),
+		CredentialsCallback: getCredentialsCallback(username, password),
 	}
-
 	cloneOpts := &git.CloneOptions{
 		FetchOptions: &git.FetchOptions{
 			RemoteCallbacks: callbacks,
@@ -66,7 +91,7 @@ func cloneTfProj(repoUrl string, update bool) bool {
 }
 
 // Gets called when authentication credentials are requested during git clone.
-func makeCredentialsCallback(username, password string) git.CredentialsCallback {
+func getCredentialsCallback(username, password string) git.CredentialsCallback {
 	// If we're trying, it means the credentials are invalid.
 	called := false
 	return func(url string, username_from_url string, allowed_types git.CredType) (git.ErrorCode, *git.Cred) {
@@ -82,11 +107,20 @@ func makeCredentialsCallback(username, password string) git.CredentialsCallback 
 // Reads the yaml config passed to Topo and returns it as a string.
 func getConfigYaml(configFile string) string {
 	config, err := ioutil.ReadFile(configFile)
-	check(err)
+	func(e error) {
+		if e != nil {
+			panic(e)
+		}
+	}(err)
+	backupConfig(configFile)
 	return string(config)
 }
 
-// Takes the yaml config string and unmarshals it to a Config struct.
+func backupConfig(s string) {
+	sh.Command("cp", s, s+".bak").Run()
+}
+
+// Takes the yaml config string and unmarshals it into a Config struct.
 func getConfig(config string) Config {
 	c := Config{}
 	err := yaml.Unmarshal([]byte(config), &c)
@@ -97,18 +131,31 @@ func getConfig(config string) Config {
 }
 
 // Make copies of the Terraform project for each provision.
-func mkProjCopies(c *Config) {
-	ch := make(chan string, len(c.Provisions))
+func mkProjCopies(c *Config, updated bool) {
+	ch := make(chan CopyInfo, len(c.Provisions))
 	for k := range c.Provisions {
 		s := k
 		go func() {
+			// If there was no remote fetch, then there's no need to copy a project that already exists.
+			if !updated {
+				if sh.Test("dir", Projects+"/"+s) {
+					ch <- CopyInfo{s, false}
+					return
+				}
+			}
 			log.Printf("creating copy of project for: %v\n", s)
 			sh.Command("cp", "-rf", Original, Projects+"/"+s).Run()
-			ch <- s
+			ch <- CopyInfo{s, true}
 		}()
 	}
 	for i := 0; i < len(c.Provisions); i++ {
-		log.Printf("done copying: %v\n", <-ch)
+		msg := <-ch
+		switch msg.copied {
+		case true:
+			log.Printf("done copying: %v\n", msg.dest)
+		case false:
+			log.Printf("copy already exists for: %v\n", msg.dest)
+		}
 	}
 }
 
@@ -131,46 +178,87 @@ func configureRemoteStates(c *Config) {
 	}
 }
 
-func computeQualifiedConfig(c *Config) *Config {
+// Returns a tuple of qualified and unqualified provisions.
+func computeQualifiedProvisions(c *Config) (map[string]Provision, map[string]Provision) {
+	unqualified := make(map[string]Provision)
 	for k, v := range c.Provisions {
-		if v.State == "changed" && v.Action == "destroy" {
+		if v.State == Changed && v.Action == Destroy {
+			unqualified[k] = v
 			delete(c.Provisions, k)
 		}
-		if v.State == "destroyed" && v.Action == "destroy" {
+		if v.State == Destroyed && v.Action == Destroy {
+			unqualified[k] = v
 			delete(c.Provisions, k)
 		}
-		if v.State == "applied" && v.Action == "apply" {
+		if v.State == Applied && v.Action == Apply {
+			unqualified[k] = v
+			delete(c.Provisions, k)
+		}
+		if v.Action != Apply && v.Action != Destroy {
+			unqualified[k] = v
 			delete(c.Provisions, k)
 		}
 	}
-	return c
+	return c.Provisions, unqualified
 }
 
 // Run terraform commands for all provisions.
-func provision(c *Config) {
-	ch := make(chan string, len(c.Provisions))
+func provision(c *Config, uq map[string]Provision) bool {
+	ch := make(chan CmdInfo, len(c.Provisions))
 	for k, v := range c.Provisions {
 		name := k
 		switch v.Action {
-		case "apply":
+		case Apply:
 			args := prepareApplyArgs(&v)
-			go runTfCmd(name, args, ch)
-		case "destroy":
+			go runTfCmd(name, args, ch, v.Action)
+		case Destroy:
 			args := prepareDestroyArgs(&v)
-			go runTfCmd(name, args, ch)
-		default:
-			log.Printf("unknown action '%v' for provision '%v'. skipping...\n", v.Action, name)
+			go runTfCmd(name, args, ch, v.Action)
 		}
 	}
-	log.Printf("completed terraform command for: %v\n", <-ch)
+	return updateProvisions(c, ch, uq)
 }
 
-func runTfCmd(name string, cmdArgs []interface{}, c chan string) {
+func updateProvisions(c *Config, ch chan CmdInfo, uq map[string]Provision) bool {
+	for i := 0; i < len(c.Provisions); i++ {
+		msg := <-ch
+		tmp := c.Provisions[msg.name]
+		log.Printf("completed terraform %v on: %v\n", msg.action, msg.name)
+		switch msg.action {
+		case Apply:
+			tmp.State = Applied
+		case Destroy:
+			tmp.State = Destroyed
+		}
+		c.Provisions[msg.name] = tmp
+	}
+	return saveConfig(c, uq)
+}
+
+func saveConfig(c *Config, uq map[string]Provision) bool {
+	for k, v := range uq {
+		c.Provisions[k] = v
+	}
+	d, err := yaml.Marshal(&c)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+		return false
+	}
+	err = ioutil.WriteFile(ConfigFile, d, 0644)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+		return false
+	}
+	log.Printf("--- config saved:\n%s\n---\n", string(d))
+	return true
+}
+
+func runTfCmd(name string, cmdArgs []interface{}, c chan CmdInfo, action Action) {
 	s := sh.NewSession()
 	s.ShowCMD = true
 	s.SetDir(Projects + "/" + name)
 	s.Command("terraform", cmdArgs...).Run()
-	c <- name
+	c <- CmdInfo{name, action}
 }
 
 func prepareDestroyArgs(p *Provision) []interface{} {
@@ -196,13 +284,18 @@ func prepareArgs(action []string, p *Provision) []interface{} {
 
 func topo(c *Config, flags map[string]interface{}) {
 	if val, ok := flags["update"].(bool); ok {
-		if cloneTfProj(c.TfRepo, val) {
-			mkProjCopies(c)
-		}
+		mkProjCopies(c, cloneTfProj(c.TfRepo, val))
 	}
-	computeQualifiedConfig(c)
+	_, unqualified := computeQualifiedProvisions(c)
 	configureRemoteStates(c)
-	provision(c)
+	switch provision(c, unqualified) {
+	case true:
+		log.Println("topo succeeded!")
+		os.Exit(0)
+	case false:
+		log.Println("topo failed :(")
+		os.Exit(1)
+	}
 }
 
 func main() {
@@ -217,11 +310,11 @@ func main() {
 		os.Exit(2)
 	}
 
-	configFile := flag.Args()[0]
-	log.Printf("topo configuration file: %v\n", configFile)
+	ConfigFile = flag.Args()[0]
+	log.Printf("topo configuration file: %v\n", ConfigFile)
 
-	config := getConfig(getConfigYaml(configFile))
-	log.Printf("--- config:\n%v\n", config)
+	config := getConfig(getConfigYaml(ConfigFile))
+	log.Printf("--- config read:\n%v\n---\n", config)
 
 	topo(&config, flags)
 }

@@ -1,6 +1,6 @@
 # Topo
 
-Topo manages multiple provisions of the same [Terraform](https://terraform.io) scripts.
+Topo helps with managing multiple provisions of the same [Terraform](https://terraform.io) scripts.
 Topo clones a Terraform project specified in a configuration file, and runs parameterized Terraform commands on it.
 Topo uses [Goroutines](https://www.golang-book.com/books/intro/10) to run Terraform commands and perform certain tasks concurrently. This helps Topo achieve acceptable speed.
 
@@ -8,11 +8,10 @@ Topo configuration file format:
 
     tf_repo: <git_repo_url>
     s3_bucket: <s3_bucket> # s3 bucket where Terraform remote state resides.
-    
     provisions:
         <name>
             action: apply | destroy
-            state: applied | changed | destroyed | nil
+            state: applied | changed | destroyed # optional
             parameters:
                 <key>: <value>
 
@@ -36,7 +35,7 @@ Topo configuration file format:
         
             $ topo -update <config_file>
 
-## What exactly does Topo do?
+## What does Topo do?
 
 1. Accepts and parses a YAML configuration file. A configuration file should contain one or more provision blocks, which look like:
 
@@ -49,13 +48,57 @@ Topo configuration file format:
               desired_instance_capacity: 1
               max_instance_size: 1
 2. Each provision should have an action and/or state. A state may have the value `applied`, `destroyed`, or `changed`.
-    An action may be either `apply` or `destroy`. The default action is `apply` and there is no default state. The provision will be ignored if any of the following cases are true:
+    An action may be either `apply` or `destroy`. The default action is `apply` and there is no default state. The provision will be ignored if any one of the following cases are true:
     - `changed` state with a `destroy` action.
     - `destroyed` state with a `destroy` action.
     - `applied` state with an `apply` action.
+    
+    The cases above are referred to as the __ignore criteria__.
 3. Topo runs a parameterized terraform (tf) command on all provisions in the config based on their action and optional state.
 4. A topo run involves the following:
     1. Cloning a git repo that contains tf scripts.
     2. Configuring the tf remote state.
     3. Running a tf command if none of the ignore criteria is met.
-5. For each successful tf command, the provision's state in the config file is updated to either `applied` or `destroyed`.
+5. For each successful tf command, the provision's state in the config file is updated to either `applied` or `destroyed`. For example, this Topo config:
+
+        tf_repo: https://github.com/shuaibiyy/ecs-jenkins.git
+        s3_bucket: flexisaf-topo
+        provisions:
+          jenkins_1:
+            action: destroy
+            state: applied
+            parameters:
+              desired_instance_capacity: "2"
+              desired_service_count: "3"
+              max_instance_size: "2"
+          jenkins_2:
+            action: apply
+            state: changed
+            parameters:
+              desired_instance_capacity: "1"
+              desired_service_count: "1"
+              max_instance_size: "1"
+    is turned into (note the change in provision states):
+    
+        tf_repo: https://github.com/shuaibiyy/ecs-jenkins.git
+        s3_bucket: flexisaf-topo
+        provisions:
+          jenkins_1:
+            action: destroy
+            state: destroyed
+            parameters:
+              desired_instance_capacity: "2"
+              desired_service_count: "3"
+              max_instance_size: "2"
+          jenkins_2:
+            action: apply
+            state: applied
+            parameters:
+              desired_instance_capacity: "1"
+              desired_service_count: "1"
+              max_instance_size: "1"
+
+## What doesn't Topo do?
+
+Topo requires you to create a configuration file and add provisions by hand. It also requires you to update the `state` of a provision to `changed` when you add, delete or modify its parameters.
+If you want Topo to skip a provision, you can set its state and action to match one of the ignore criteria.
