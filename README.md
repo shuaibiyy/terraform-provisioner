@@ -6,7 +6,7 @@ Topo uses [Goroutines](https://www.golang-book.com/books/intro/10) to run Terraf
 
 Topo configuration file format:
 
-    tf_repo: <git_repo_url>
+    tf_repo: <git_repo_url> # git URL where Terraform project is located.
     s3_bucket: <s3_bucket> # s3 bucket where Terraform remote state resides.
     provisions:
         <name>
@@ -14,6 +14,7 @@ Topo configuration file format:
             state: applied | changed | destroyed # optional
             parameters:
                 <key>: <value>
+Topo currently only works with [AWS Terraform provider](https://www.terraform.io/docs/providers/aws/index.html) and [S3 remote backend](https://www.terraform.io/docs/state/remote/s3.html).
 
 ## Usage
 
@@ -57,7 +58,7 @@ Topo configuration file format:
 3. Topo runs a parameterized terraform (tf) command on all provisions in the config based on their action and optional state.
 4. A topo run involves the following:
     1. Cloning a git repo that contains tf scripts.
-    2. Configuring the tf remote state.
+    2. Configuring and syncing the tf remote state.
     3. Running a tf command if none of the ignore criteria is met.
 5. For each successful tf command, the provision's state in the config file is updated to either `applied` or `destroyed`. For example, this Topo config:
 
