@@ -9,9 +9,7 @@ func TestConfigUnmarshalling(t *testing.T) {
 	const configYaml = `
 tf_repo: https://github.com/shuaibiyy/ecs-jenkins.git
 s3_bucket: bucket-topo
-
 provisions:
-
   jenkins_1:
     action: apply
     parameters:
@@ -42,9 +40,7 @@ func TestComputeQualifiedConfig(t *testing.T) {
 	const configYaml = `
 tf_repo: https://github.com/shuaibiyy/ecs-jenkins.git
 s3_bucket: bucket-topo
-
 provisions:
-
   jenkins_1:
     action: destroy
     state: destroyed
@@ -52,7 +48,6 @@ provisions:
       desired_service_count: 3
       desired_instance_capacity: 2
       max_instance_size: 2
-
   jenkins_2:
     action: apply
     state: changed
@@ -60,7 +55,6 @@ provisions:
       desired_service_count: 5
       desired_instance_capacity: 3
       max_instance_size: 4
-
   jenkins_3:
     action: destroy
     state: changed
@@ -68,7 +62,6 @@ provisions:
       desired_service_count: 1
       desired_instance_capacity: 1
       max_instance_size: 2
-
   jenkins_4:
     action: destroy
     state: applied
@@ -76,7 +69,6 @@ provisions:
       desired_service_count: 2
       desired_instance_capacity: 2
       max_instance_size: 2
-
   jenkins_5:
     action: apply
     state: applied
