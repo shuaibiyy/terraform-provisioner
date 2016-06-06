@@ -106,12 +106,10 @@ func getCredentialsCallback(username, password string) git.CredentialsCallback {
 
 // Reads the yaml config passed to Topo and returns it as a string.
 func getConfigYaml(configFile string) string {
-	config, err := ioutil.ReadFile(configFile)
-	func(e error) {
-		if e != nil {
-			panic(e)
-		}
-	}(err)
+	config, e := ioutil.ReadFile(configFile)
+	if e != nil {
+		panic(e)
+	}
 	backupConfig(configFile)
 	return string(config)
 }
