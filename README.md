@@ -18,7 +18,7 @@ Topo currently only works with [AWS Terraform provider](https://www.terraform.io
 
 ## Usage
 
-1. Create a yaml file using the Topo config format (you can refer to `topograph-sample.yml`), and name it something like `topograph.yml`.
+1. Create a yaml file using the Topo config format (you can refer to `topo-sample.yml`), and name it whatever you want.
 2. Export the following environment variables:
 
         $ export AWS_ACCESS_KEY_ID="accesskey" # For tf to access AWS.
@@ -30,7 +30,7 @@ Topo currently only works with [AWS Terraform provider](https://www.terraform.io
         $ export TP_GIT_PASSWORD=<git_password>
 3. Run Topo with config created in step 1:
 
-        $ topo [flags...] topograph.yml
+        $ topo [flags...] topo-sample.yml
     Available flags are:
     * `-update`: when specified guarantees that the terraform project will be fetched from remote, even if it was previously fetched. Note that flags must appear before the name of the config file, e.g.:
         
